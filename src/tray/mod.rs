@@ -1,27 +1,33 @@
-use crate::{dbus_queue::DBusQueue, tray::icons_cache::IconsCache};
+use std::collections::HashMap;
+
+use crate::dbus_queue::DBusQueue;
 use ::icon::Icons;
 use anyhow::Result;
 use app::App;
 use icon::TrayIcon;
+use icons_cache::IconsCache;
 use mini_sansio_dbus::{
     IncomingMessage, OutgoingQueue,
     messages::org_freedesktop_dbus::{NameOwnerChangedSignal, NameOwnerChangedSubscribe},
     messaging::DBusEncode as _,
 };
+use name_cache::NameCache;
 use service::Service;
 use status_notifier_watcher::StatusNotifierWatcher;
-use tray_mon::{Event, FixedSizeString};
+use tray_mon::Event;
 
 mod app;
 mod icon;
 mod icons_cache;
+mod name_cache;
 mod service;
 mod status_notifier_watcher;
 
 pub struct Tray {
-    registry: Vec<(Service, App)>,
+    registry: HashMap<Service, App>,
     icons: Icons,
     icons_cache: IconsCache,
+    name_cache: NameCache,
 }
 
 impl Tray {
@@ -29,9 +35,10 @@ impl Tray {
         Self::init(q)?;
         let icons = Icons::new();
         Ok(Self {
-            registry: vec![],
+            registry: HashMap::new(),
             icons,
             icons_cache: IconsCache::new(),
+            name_cache: NameCache::new(),
         })
     }
 
@@ -67,31 +74,39 @@ impl Tray {
             log::info!(target: "Tray", "Added {service:?}");
             let mut tray_app = App::new(service.clone());
             tray_app.init(q)?;
-            self.registry.retain(|(s, _)| s != &service);
-            self.registry.push((service, tray_app));
+            self.registry.insert(service, tray_app);
             return Ok(None);
         }
 
         if let Some(service) = NameOwnerChangedSignal::handle(message)? {
-            let Some(idx) = self
+            let Some(key) = self
                 .registry
-                .iter()
-                .position(|(s, _)| s.name() == service || s.raw_address() == service)
+                .keys()
+                .find(|s| s.name() == service || s.raw_address() == service)
+                .cloned()
             else {
                 return Ok(None);
             };
 
-            let (_, mut tray_app) = self.registry.remove(idx);
+            let Some(mut tray_app) = self.registry.remove(&key) else {
+                return Ok(None);
+            };
 
             log::info!(target: "Tray", "Removed {service}");
             tray_app.reset(q)?;
             return Ok(Some(Event::AppRemoved {
-                service: FixedSizeString::new(service)?,
+                service: self.name_cache.add(service),
             }));
         }
 
         for (service, app) in &mut self.registry {
-            if let Some(event) = app.handle(message, q, &self.icons, &mut self.icons_cache)? {
+            if let Some(event) = app.handle(
+                message,
+                q,
+                &self.icons,
+                &mut self.icons_cache,
+                &mut self.name_cache,
+            )? {
                 let service = service.name();
 
                 log::info!(target: "Tray", "{service:?} {event:#?}");
@@ -102,7 +117,12 @@ impl Tray {
         Ok(None)
     }
 
-    fn try_trigger(&self, service: &str, id: i32, q: &mut DBusQueue) -> Result<()> {
+    fn try_trigger(&self, service_id: u32, id: i32, q: &mut DBusQueue) -> Result<()> {
+        let Some(service) = self.name_cache.resolve(service_id) else {
+            log::warn!("Unknown service id {service_id}");
+            return Ok(());
+        };
+
         let Some((_, tray_app)) = self
             .registry
             .iter()
@@ -116,17 +136,16 @@ impl Tray {
         Ok(())
     }
 
-    #[expect(dead_code)]
-    pub(crate) fn trigger(&self, service: &str, id: i32, q: &mut DBusQueue) {
-        if let Err(err) = self.try_trigger(service, id, q) {
+    pub(crate) fn trigger(&self, service_id: u32, id: i32, q: &mut DBusQueue) {
+        if let Err(err) = self.try_trigger(service_id, id, q) {
             log::error!("{err:?}");
         }
     }
 
-    pub(crate) fn serialize(&self) -> Vec<Vec<u8>> {
+    pub(crate) fn serialize(&mut self) -> Vec<Vec<u8>> {
         let mut blobs = vec![];
-        for (_, app) in &self.registry {
-            if let Ok(Some(blob)) = app.serialize() {
+        for app in self.registry.values() {
+            if let Ok(Some(blob)) = app.serialize(&mut self.name_cache) {
                 blobs.push(blob.serialize().to_vec());
             }
         }

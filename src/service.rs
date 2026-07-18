@@ -28,7 +28,7 @@ impl TrayMonService {
     }
 }
 
-impl Service for TrayMonService {
+impl Service<8> for TrayMonService {
     type Error = TrayMonServiceError;
 
     fn pollfds(&mut self) -> Result<impl Iterator<Item = PollFd<'_>>, Self::Error> {
@@ -63,8 +63,19 @@ impl Service for TrayMonService {
         Err(anyhow::anyhow!("DBus poll error: got revents {revents:?}").into())
     }
 
-    fn state_as_serialized_bufs(&self) -> impl Iterator<Item = Vec<u8>> {
-        self.tray.serialize().into_iter()
+    fn on_client_connected(&mut self, mut write: impl FnMut(Vec<u8>)) -> Result<(), Self::Error> {
+        for buf in self.tray.serialize() {
+            (write)(buf);
+        }
+        Ok(())
+    }
+
+    fn on_client_request(&mut self, buf: [u8; 8]) -> Result<(), Self::Error> {
+        let service_id = u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]);
+        let id = i32::from_be_bytes([buf[4], buf[5], buf[6], buf[7]]);
+        log::error!("Request: service_id={service_id} id={id}");
+        self.tray.trigger(service_id, id, &mut self.queue);
+        Ok(())
     }
 }
 

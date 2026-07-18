@@ -1,4 +1,4 @@
-use crate::tray::TrayIcon;
+use crate::tray::{TrayIcon, name_cache::NameCache};
 use anyhow::Result;
 use std::rc::Rc;
 use tray_mon::{Elements, Event, FixedSizeString};
@@ -17,6 +17,7 @@ impl State {
         &mut self,
         service: &str,
         new_icon: Rc<TrayIcon>,
+        name_cache: &mut NameCache,
     ) -> Result<Option<Event>> {
         match core::mem::take(self) {
             Self::Nothing => {
@@ -30,7 +31,7 @@ impl State {
             Self::OnlyLayout(layout) => {
                 *self = Self::All;
                 Ok(Some(Event::AppAdded {
-                    service: FixedSizeString::new(service)?,
+                    service: name_cache.add(service),
                     icon: FixedSizeString::new(new_icon.filepath())?,
                     menu: *layout,
                 }))
@@ -38,7 +39,7 @@ impl State {
             Self::All => {
                 *self = Self::All;
                 Ok(Some(Event::IconUpdated {
-                    service: FixedSizeString::new(service)?,
+                    service: name_cache.add(service),
                     icon: FixedSizeString::new(new_icon.filepath())?,
                 }))
             }
@@ -49,6 +50,7 @@ impl State {
         &mut self,
         service: &str,
         new_layout: &Elements,
+        name_cache: &mut NameCache,
     ) -> Result<Option<Event>> {
         match core::mem::take(self) {
             Self::Nothing => {
@@ -58,7 +60,7 @@ impl State {
             Self::OnlyIcon(icon) => {
                 *self = Self::All;
                 Ok(Some(Event::AppAdded {
-                    service: FixedSizeString::new(service)?,
+                    service: name_cache.add(service),
                     icon: FixedSizeString::new(icon.filepath())?,
                     menu: *new_layout,
                 }))
@@ -70,7 +72,7 @@ impl State {
             Self::All => {
                 *self = Self::All;
                 Ok(Some(Event::MenuUpdated {
-                    service: FixedSizeString::new(service)?,
+                    service: name_cache.add(service),
                     menu: *new_layout,
                 }))
             }

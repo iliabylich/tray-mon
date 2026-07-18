@@ -25,27 +25,25 @@ use anyhow::{Result, ensure};
 #[must_use]
 pub enum Event {
     AppAdded {
-        service: FixedSizeString,
+        service: u32,
         icon: FixedSizeString,
         menu: Elements,
     },
     AppRemoved {
-        service: FixedSizeString,
+        service: u32,
     },
     MenuUpdated {
-        service: FixedSizeString,
+        service: u32,
         menu: Elements,
     },
     IconUpdated {
-        service: FixedSizeString,
+        service: u32,
         icon: FixedSizeString,
     },
 }
 impl Event {
-    pub const SERIALIZED_BYTESIZE: usize = 1
-        + FixedSizeString::SERIALIZED_BYTESIZE
-        + FixedSizeString::SERIALIZED_BYTESIZE
-        + Elements::SERIALIZED_BYTESIZE;
+    pub const SERIALIZED_BYTESIZE: usize =
+        1 + size_of::<u32>() + FixedSizeString::SERIALIZED_BYTESIZE + Elements::SERIALIZED_BYTESIZE;
 
     #[must_use]
     pub fn serialize(self) -> [u8; Self::SERIALIZED_BYTESIZE] {
@@ -59,22 +57,22 @@ impl Event {
                 menu,
             } => {
                 write_u8(&mut buf, 1);
-                write_fixed_size_string(&mut buf, &service);
+                write_u32(&mut buf, service);
                 write_fixed_size_string(&mut buf, &icon);
                 write_menu(&mut buf, &menu);
             }
             Self::AppRemoved { service } => {
                 write_u8(&mut buf, 2);
-                write_fixed_size_string(&mut buf, &service);
+                write_u32(&mut buf, service);
             }
             Self::MenuUpdated { service, menu } => {
                 write_u8(&mut buf, 3);
-                write_fixed_size_string(&mut buf, &service);
+                write_u32(&mut buf, service);
                 write_menu(&mut buf, &menu);
             }
             Self::IconUpdated { service, icon } => {
                 write_u8(&mut buf, 4);
-                write_fixed_size_string(&mut buf, &service);
+                write_u32(&mut buf, service);
                 write_fixed_size_string(&mut buf, &icon);
             }
         }
@@ -87,7 +85,7 @@ impl Event {
 
         match read_u8(&mut buf) {
             1 => {
-                let service = read_fixed_size_string(&mut buf);
+                let service = read_u32(&mut buf);
                 let icon = read_fixed_size_string(&mut buf);
                 let menu = read_menu(&mut buf);
                 Self::AppAdded {
@@ -97,16 +95,16 @@ impl Event {
                 }
             }
             2 => {
-                let service = read_fixed_size_string(&mut buf);
+                let service = read_u32(&mut buf);
                 Self::AppRemoved { service }
             }
             3 => {
-                let service = read_fixed_size_string(&mut buf);
+                let service = read_u32(&mut buf);
                 let menu = read_menu(&mut buf);
                 Self::MenuUpdated { service, menu }
             }
             4 => {
-                let service = read_fixed_size_string(&mut buf);
+                let service = read_u32(&mut buf);
                 let icon = read_fixed_size_string(&mut buf);
                 Self::IconUpdated { service, icon }
             }
@@ -137,37 +135,46 @@ impl Elements {
 pub enum Element {
     Regular {
         id: i32,
+        root: bool,
         label: Label,
     },
     Disabled {
         id: i32,
+        root: bool,
         label: Label,
     },
     Checkbox {
         id: i32,
+        root: bool,
         label: Label,
         checked: bool,
     },
     Radio {
         id: i32,
+        root: bool,
         label: Label,
         selected: bool,
     },
     Nested {
         id: i32,
+        root: bool,
         label: Label,
         child_start_idx: u64,
         child_end_idx: u64,
     },
     Section {
+        root: bool,
         child_start_idx: u64,
         child_end_idx: u64,
     },
     None,
 }
 impl Element {
-    pub const SERIALIZED_BYTESIZE: usize =
-        1 + size_of::<i32>() + Label::SERIALIZED_BYTESIZE + size_of::<u64>() * 2;
+    pub const SERIALIZED_BYTESIZE: usize = size_of::<u8>()
+        + size_of::<i32>()
+        + size_of::<u8>()
+        + Label::SERIALIZED_BYTESIZE
+        + size_of::<u64>() * 2;
 
     #[must_use]
     pub fn serialize(self) -> [u8; Self::SERIALIZED_BYTESIZE] {
@@ -175,49 +182,63 @@ impl Element {
         let mut buf = &mut out[..];
 
         match self {
-            Self::Regular { id, label } => {
+            Self::Regular { id, root, label } => {
                 write_u8(&mut buf, 1);
                 write_i32(&mut buf, id);
+                write_u8(&mut buf, u8::from(root));
                 write_label(&mut buf, &label);
             }
-            Self::Disabled { id, label } => {
+            Self::Disabled { id, root, label } => {
                 write_u8(&mut buf, 2);
                 write_i32(&mut buf, id);
+                write_u8(&mut buf, u8::from(root));
                 write_label(&mut buf, &label);
             }
-            Self::Checkbox { id, label, checked } => {
+            Self::Checkbox {
+                id,
+                root,
+                label,
+                checked,
+            } => {
                 write_u8(&mut buf, 3);
                 write_i32(&mut buf, id);
+                write_u8(&mut buf, u8::from(root));
                 write_u8(&mut buf, u8::from(checked));
                 write_label(&mut buf, &label);
             }
             Self::Radio {
                 id,
+                root,
                 label,
                 selected,
             } => {
                 write_u8(&mut buf, 4);
                 write_i32(&mut buf, id);
+                write_u8(&mut buf, u8::from(root));
                 write_u8(&mut buf, u8::from(selected));
                 write_label(&mut buf, &label);
             }
             Self::Nested {
                 id,
+                root,
                 label,
                 child_start_idx,
                 child_end_idx,
             } => {
                 write_u8(&mut buf, 5);
                 write_i32(&mut buf, id);
+                write_u8(&mut buf, u8::from(root));
                 write_u64(&mut buf, child_start_idx);
                 write_u64(&mut buf, child_end_idx);
                 write_label(&mut buf, &label);
             }
             Self::Section {
+                root,
                 child_start_idx,
                 child_end_idx,
             } => {
                 write_u8(&mut buf, 6);
+                write_u8(&mut buf, u8::from(root));
                 write_u64(&mut buf, child_start_idx);
                 write_u64(&mut buf, child_end_idx);
             }
@@ -236,22 +257,26 @@ impl Element {
 
             1 => {
                 let id = read_i32(&mut buf);
+                let root = read_u8(&mut buf) == 1;
                 let label = read_label(&mut buf);
-                Self::Regular { id, label }
+                Self::Regular { id, root, label }
             }
 
             2 => {
                 let id = read_i32(&mut buf);
+                let root = read_u8(&mut buf) == 1;
                 let label = read_label(&mut buf);
-                Self::Disabled { id, label }
+                Self::Disabled { id, root, label }
             }
 
             3 => {
                 let id = read_i32(&mut buf);
+                let root = read_u8(&mut buf) == 1;
                 let checked = read_u8(&mut buf);
                 let label = read_label(&mut buf);
                 Self::Checkbox {
                     id,
+                    root,
                     label,
                     checked: checked == 1,
                 }
@@ -259,10 +284,12 @@ impl Element {
 
             4 => {
                 let id = read_i32(&mut buf);
+                let root = read_u8(&mut buf) == 1;
                 let selected = read_u8(&mut buf);
                 let label = read_label(&mut buf);
                 Self::Radio {
                     id,
+                    root,
                     label,
                     selected: selected == 1,
                 }
@@ -270,11 +297,13 @@ impl Element {
 
             5 => {
                 let id = read_i32(&mut buf);
+                let root = read_u8(&mut buf) == 1;
                 let child_start_idx = read_u64(&mut buf);
                 let child_end_idx = read_u64(&mut buf);
                 let label = read_label(&mut buf);
                 Self::Nested {
                     id,
+                    root,
                     label,
                     child_start_idx,
                     child_end_idx,
@@ -282,9 +311,11 @@ impl Element {
             }
 
             6 => {
+                let root = read_u8(&mut buf) == 1;
                 let child_start_idx = read_u64(&mut buf);
                 let child_end_idx = read_u64(&mut buf);
                 Self::Section {
+                    root,
                     child_start_idx,
                     child_end_idx,
                 }
@@ -299,29 +330,35 @@ impl Element {
         match rand::random_range(1..=6) {
             1 => Self::Regular {
                 id: rand::random(),
+                root: rand::random(),
                 label: Label::random(),
             },
             2 => Self::Disabled {
                 id: rand::random(),
+                root: rand::random(),
                 label: Label::random(),
             },
             3 => Self::Checkbox {
                 id: rand::random(),
+                root: rand::random(),
                 label: Label::random(),
                 checked: rand::random(),
             },
             4 => Self::Radio {
                 id: rand::random(),
+                root: rand::random(),
                 label: Label::random(),
                 selected: rand::random(),
             },
             5 => Self::Nested {
                 id: rand::random(),
+                root: rand::random(),
                 label: Label::random(),
                 child_start_idx: rand::random(),
                 child_end_idx: rand::random(),
             },
             6 => Self::Section {
+                root: rand::random(),
                 child_start_idx: rand::random(),
                 child_end_idx: rand::random(),
             },
@@ -479,6 +516,11 @@ fn write_i32(buf: &mut &mut [u8], n: i32) {
     *buf = rest;
     head.copy_from_slice(&n.to_be_bytes());
 }
+fn write_u32(buf: &mut &mut [u8], n: u32) {
+    let (head, rest) = std::mem::take(buf).split_at_mut(4);
+    *buf = rest;
+    head.copy_from_slice(&n.to_be_bytes());
+}
 fn write_label(buf: &mut &mut [u8], text: &Label) {
     let (head, tail) = std::mem::take(buf).split_at_mut(Label::SERIALIZED_BYTESIZE);
     *buf = tail;
@@ -512,6 +554,11 @@ fn read_u8(buf: &mut &[u8]) -> u8 {
 }
 fn read_i32(buf: &mut &[u8]) -> i32 {
     let n = i32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]);
+    *buf = &buf[4..];
+    n
+}
+fn read_u32(buf: &mut &[u8]) -> u32 {
+    let n = u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]);
     *buf = &buf[4..];
     n
 }
@@ -570,7 +617,8 @@ mod test {
     #[test]
     fn test_serialize_element_regular() {
         let e = Element::Regular {
-            id: 42,
+            id: rand::random(),
+            root: rand::random(),
             label: Label::random(),
         };
         assert_eq!(Element::deserialize(e.serialize()), e);
@@ -579,7 +627,8 @@ mod test {
     #[test]
     fn test_serialize_element_disabled() {
         let e = Element::Disabled {
-            id: 42,
+            id: rand::random(),
+            root: rand::random(),
             label: Label::random(),
         };
         assert_eq!(Element::deserialize(e.serialize()), e);
@@ -588,7 +637,8 @@ mod test {
     #[test]
     fn test_serialize_element_checkbox() {
         let e = Element::Checkbox {
-            id: 42,
+            id: rand::random(),
+            root: rand::random(),
             label: Label::random(),
             checked: true,
         };
@@ -598,7 +648,8 @@ mod test {
     #[test]
     fn test_serialize_element_radio() {
         let e = Element::Radio {
-            id: 42,
+            id: rand::random(),
+            root: rand::random(),
             label: Label::random(),
             selected: true,
         };
@@ -608,7 +659,8 @@ mod test {
     #[test]
     fn test_serialize_element_nested() {
         let e = Element::Nested {
-            id: 42,
+            id: rand::random(),
+            root: rand::random(),
             label: Label::random(),
             child_start_idx: 42,
             child_end_idx: 142,
@@ -619,6 +671,7 @@ mod test {
     #[test]
     fn test_serialize_element_section() {
         let e = Element::Section {
+            root: rand::random(),
             child_start_idx: 142,
             child_end_idx: 242,
         };
@@ -628,7 +681,7 @@ mod test {
     #[test]
     fn test_serialize_app_added() {
         let e = Event::AppAdded {
-            service: FixedSizeString::random(),
+            service: rand::random(),
             icon: FixedSizeString::random(),
             menu: Elements::random(),
         };
@@ -638,7 +691,7 @@ mod test {
     #[test]
     fn test_serialize_app_removed() {
         let e = Event::AppRemoved {
-            service: FixedSizeString::random(),
+            service: rand::random(),
         };
         assert_eq!(Event::deserialize(e.serialize()), e);
     }
@@ -646,7 +699,7 @@ mod test {
     #[test]
     fn test_serialize_menu_updated() {
         let e = Event::MenuUpdated {
-            service: FixedSizeString::random(),
+            service: rand::random(),
             menu: Elements::random(),
         };
         assert_eq!(Event::deserialize(e.serialize()), e);
@@ -655,7 +708,7 @@ mod test {
     #[test]
     fn test_serialize_icon_updated() {
         let e = Event::IconUpdated {
-            service: FixedSizeString::random(),
+            service: rand::random(),
             icon: FixedSizeString::random(),
         };
         assert_eq!(Event::deserialize(e.serialize()), e);

@@ -1,0 +1,8 @@
+[Unit]
+Description=Tray monitor service
+Requires=tray-mon.socket dbus.service
+After=tray-mon.socket dbus.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/tray-mon --systemd

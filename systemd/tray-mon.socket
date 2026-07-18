@@ -1,0 +1,8 @@
+[Unit]
+Description=Tray monitor socket
+
+[Socket]
+ListenStream=%t/tray-mon.sock
+
+[Install]
+WantedBy=sockets.target

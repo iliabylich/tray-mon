@@ -119,7 +119,8 @@ impl TrayItem {
         while let Some(QueueItem { nodes, parent_idx }) = queue.pop_front() {
             let start_idx = flat.len();
             for node in nodes {
-                let element = node.as_element_ignoring_children();
+                let root = parent_idx.is_none();
+                let element = node.as_element_ignoring_children(root);
                 flat.push(element);
 
                 match node {
@@ -158,6 +159,7 @@ impl TrayItem {
                     | Element::Section {
                         child_start_idx,
                         child_end_idx,
+                        ..
                     } => {
                         *child_start_idx = start_idx as u64;
                         *child_end_idx = end_idx as u64;
@@ -178,18 +180,21 @@ impl TrayItem {
         })?))
     }
 
-    const fn as_element_ignoring_children(&self) -> Element {
+    const fn as_element_ignoring_children(&self, root: bool) -> Element {
         match self {
             Self::Regular { id, label } => Element::Regular {
                 id: *id,
+                root,
                 label: *label,
             },
             Self::Disabled { id, label } => Element::Disabled {
                 id: *id,
+                root,
                 label: *label,
             },
             Self::Checkbox { id, label, checked } => Element::Checkbox {
                 id: *id,
+                root,
                 label: *label,
                 checked: *checked,
             },
@@ -199,6 +204,7 @@ impl TrayItem {
                 selected,
             } => Element::Radio {
                 id: *id,
+                root,
                 label: *label,
                 selected: *selected,
             },
@@ -208,6 +214,7 @@ impl TrayItem {
                 children: _children,
             } => Element::Nested {
                 id: *id,
+                root,
                 label: *label,
                 child_start_idx: 0,
                 child_end_idx: 0,
@@ -215,6 +222,7 @@ impl TrayItem {
             Self::Section {
                 children: _children,
             } => Element::Section {
+                root,
                 child_start_idx: 0,
                 child_end_idx: 0,
             },

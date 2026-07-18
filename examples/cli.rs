@@ -2,11 +2,8 @@ use anyhow::{Context as _, Result};
 use rustix::net::{AddressFamily, SocketAddrUnix, SocketType};
 use tray_mon::Event;
 
-const USAGE: &str = "
-Usage: cli /path/to/socket [--query-at-start]
-";
 fn print_usage_and_exit() -> ! {
-    eprintln!("{USAGE}");
+    eprintln!("Usage: cli /path/to/socket");
     std::process::exit(1);
 }
 
@@ -16,7 +13,6 @@ fn main() -> Result<()> {
         eprintln!("no path given");
         print_usage_and_exit()
     });
-    let query_at_start = args.next().is_some_and(|arg| arg == "--query-at-start");
 
     let fd = rustix::net::socket(AddressFamily::UNIX, SocketType::STREAM, None)
         .context("socket() failed")?;
@@ -24,9 +20,7 @@ fn main() -> Result<()> {
     let addr = SocketAddrUnix::new(path).context("can't build UNIX socket address")?;
     rustix::net::connect(&fd, &addr).context("connect() failed")?;
 
-    if query_at_start {
-        rustix::io::write(&fd, b"1").context("write() failed")?;
-    }
+    rustix::io::write(&fd, &[0, 0, 0, 1, 0, 0, 0, 2]).unwrap();
 
     loop {
         let mut buf = [0; Event::SERIALIZED_BYTESIZE];

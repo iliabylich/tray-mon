@@ -1,7 +1,7 @@
 use crate::{
     dbus_queue::DBusQueue,
     infallible_property::InfalliblePropertyGetAndSubscribe,
-    tray::{Service, icon::TrayIcon, icons_cache::IconsCache},
+    tray::{Service, icon::TrayIcon, icons_cache::IconsCache, name_cache::NameCache},
 };
 use anyhow::{Context, Result};
 use icon::Icons;
@@ -154,6 +154,7 @@ impl App {
         q: &mut DBusQueue,
         icons: &Icons,
         icons_cache: &mut IconsCache,
+        name_cache: &mut NameCache,
     ) -> Result<Option<Event>> {
         if message.sender != Some(self.service.raw_address()) {
             return Ok(None);
@@ -172,7 +173,9 @@ impl App {
             log::info!(target: "Tray", "Received icon name {:?}", self.service);
             let icon = icons_cache.new_icon_name(name_or_path, icons)?;
             self.icon = Some(Rc::clone(&icon));
-            let event = self.state.on_icon_received(self.service.name(), icon)?;
+            let event = self
+                .state
+                .on_icon_received(self.service.name(), icon, name_cache)?;
             return Ok(event);
         }
 
@@ -184,7 +187,9 @@ impl App {
             let height = u32::try_from(height).context("negative icon pixmap height")?;
             let icon = icons_cache.new_icon_pixmap(width, height, bytes)?;
             self.icon = Some(Rc::clone(&icon));
-            let event = self.state.on_icon_received(self.service.name(), icon)?;
+            let event = self
+                .state
+                .on_icon_received(self.service.name(), icon, name_cache)?;
             return Ok(event);
         }
 
@@ -194,9 +199,9 @@ impl App {
             log::info!(target: "Tray", "Got layout");
             let elements = TrayItem::flatten(layout)?;
             self.menu = Some(elements);
-            let event = self
-                .state
-                .on_layout_receieved(self.service.name(), &elements)?;
+            let event =
+                self.state
+                    .on_layout_receieved(self.service.name(), &elements, name_cache)?;
             return Ok(event);
         }
 
@@ -245,7 +250,7 @@ impl App {
         Ok(())
     }
 
-    pub(crate) fn serialize(&self) -> Result<Option<Event>> {
+    pub(crate) fn serialize(&self, name_cache: &mut NameCache) -> Result<Option<Event>> {
         let Some(icon) = self.icon.as_ref() else {
             return Ok(None);
         };
@@ -253,7 +258,7 @@ impl App {
             return Ok(None);
         };
         Ok(Some(Event::AppAdded {
-            service: FixedSizeString::new(self.service.name())?,
+            service: name_cache.add(self.service.name()),
             icon: FixedSizeString::new(icon.filepath())?,
             menu,
         }))
