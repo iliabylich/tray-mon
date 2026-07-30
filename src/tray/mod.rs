@@ -78,11 +78,13 @@ impl Tray {
             return Ok(None);
         }
 
-        if let Some(service) = NameOwnerChangedSignal::handle(message)? {
+        if let Some(NameOwnerChangedSignal::Disappeared { name, owner }) =
+            NameOwnerChangedSignal::handle(message)?
+        {
             let Some(key) = self
                 .registry
                 .keys()
-                .find(|s| s.name() == service || s.raw_address() == service)
+                .find(|s| s.name() == name || s.raw_address() == owner)
                 .cloned()
             else {
                 return Ok(None);
@@ -92,10 +94,10 @@ impl Tray {
                 return Ok(None);
             };
 
-            log::info!(target: "Tray", "Removed {service}");
+            log::info!(target: "Tray", "Removed {name}/{owner}");
             tray_app.reset(q)?;
             return Ok(Some(Event::AppRemoved {
-                service: self.name_cache.add(service),
+                service: self.name_cache.add(name),
             }));
         }
 

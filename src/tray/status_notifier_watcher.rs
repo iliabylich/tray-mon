@@ -16,7 +16,7 @@ impl DBusEncode for RequestNameOrgKdeStatusNotifierWatcher {
     type Args<'a> = ();
 
     fn encode<'a>((): Self::Args<'_>, buf: &'a mut [u8]) -> Result<&'a [u8], EncodeError> {
-        RequestName::encode(buf, "org.kde.StatusNotifierWatcher")
+        RequestName::encode("org.kde.StatusNotifierWatcher", buf)
     }
 }
 
@@ -32,7 +32,7 @@ impl StatusNotifierWatcher {
 
     fn reply_ok(serial: u32, destination: &str, q: &mut DBusQueue) -> Result<(), DBusError> {
         let mut buf = [0; 1_024];
-        let buf = EmptyMethodReturn::encode(&mut buf, destination, serial)?;
+        let buf = EmptyMethodReturn::encode((destination, serial), &mut buf)?;
         q.push_raw(buf);
         Ok(())
     }
