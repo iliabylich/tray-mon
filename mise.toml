@@ -1,0 +1,7 @@
+[tasks.connect]
+usage = 'arg "<path>"'
+run = 'cargo run --example cli -- {{usage.path}} --query-at-start'
+
+[tasks.dev]
+usage = 'arg "[log_level]" default="trace"'
+run = 'RUST_LOG={{usage.log_level}} cargo run -- --dev'
