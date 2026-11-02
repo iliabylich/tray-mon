@@ -12,7 +12,7 @@
     clippy::nursery
 )]
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use pollsendd::Runtime;
 
 mod args;
@@ -37,12 +37,7 @@ fn main() -> Result<()> {
 
     let mut rt = match args.mode {
         RunMode::Systemd => Runtime::new_with_systemd_socket(service),
-        RunMode::Dev => {
-            let xdg_runtime_dir =
-                std::env::var("XDG_RUNTIME_DIR").context("no $XDG_RUNTIME_DIR")?;
-            let path = format!("{xdg_runtime_dir}/tray-mon-dev.sock");
-            Runtime::new_with_socket_path(&path, service)
-        }
+        RunMode::Dev => Runtime::new_with_socket_path("tray-mon-dev.sock", service),
     }?;
 
     loop {
